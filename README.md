@@ -1,36 +1,47 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Calisthenics Tracker
 
-## Getting Started
+Mobile-first web app for logging and tracking a 12-week advanced calisthenics training plan. Select a session, log sets/reps/weight (pre-filled from your last session), and track progress over time with charts.
 
-First, run the development server:
+## Architecture
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- **Next.js 14** (App Router) — pages: Home, Log Workout, Progress Dashboard
+- **GitHub API** — workout logs stored as JSON files in `mpurer/calisthenics-logs` (private repo)
+- **`/api/github` route** — server-side proxy keeping the GitHub token out of the browser
+- **Recharts** — line charts for progress tracking
+- **Tailwind CSS** — mobile-first dark theme
+
+```
+src/
+├── app/
+│   ├── page.tsx                    # Home: session picker + deload toggle
+│   ├── log/[sessionType]/          # Log workout page
+│   ├── dashboard/                  # Progress dashboard
+│   └── api/github/route.ts         # GitHub API proxy
+├── components/                     # UI components
+├── config/training-plan.ts         # Hardcoded exercises for all 4 sessions
+└── lib/
+    ├── github.ts                   # Client for /api/github
+    ├── logs.ts                     # Pure utility functions
+    └── types.ts                    # Shared TypeScript types
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Local Development
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Clone the repo
+2. `npm install`
+3. Create `.env.local` (see `.env.example`):
+   ```
+   GITHUB_TOKEN=your_github_fine_grained_pat_here
+   ```
+   Token needs **Contents: Read and Write** on `mpurer/calisthenics-logs`.
+4. `npm run dev` — open [http://localhost:3000](http://localhost:3000)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Running Tests
 
-## Learn More
+```bash
+npm test
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Deployment
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Hosted on Vercel. Set `GITHUB_TOKEN` as an environment variable in the Vercel project settings.
