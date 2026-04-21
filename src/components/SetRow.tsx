@@ -52,7 +52,7 @@ export function SetRow({ index, set, type, onChange, onDelete }: Props) {
 
       <button
         onClick={() => onDelete(index)}
-        className="text-red-500 hover:text-red-400 text-lg leading-none px-1"
+        className="text-red-500 hover:text-red-400 text-lg min-w-[44px] min-h-[44px] flex items-center justify-center"
         aria-label="Delete set"
       >
         ×

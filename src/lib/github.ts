@@ -5,21 +5,27 @@ const API = '/api/github'
 
 export async function listLogFiles(): Promise<LogFile[]> {
   const res = await fetch(`${API}?action=list`)
-  const filenames: string[] = await res.json()
-  return filenames.map(parseLogFilename).sort((a, b) => b.date.localeCompare(a.date))
+  if (!res.ok) return []
+  const data = await res.json()
+  if (!Array.isArray(data)) return []
+  return (data as string[]).map(parseLogFilename).sort((a, b) => b.date.localeCompare(a.date))
 }
 
 export async function readLog(filename: string): Promise<WorkoutLog | null> {
   const res = await fetch(`${API}?action=read&path=logs/${filename}`)
+  if (!res.ok) return null
   const data = await res.json()
   return data?.content ?? null
 }
 
 export async function writeLog(log: WorkoutLog): Promise<void> {
   const filename = `${log.date}-${log.sessionType}.json`
-  await fetch(API, {
+  const res = await fetch(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path: `logs/${filename}`, content: log }),
   })
+  if (!res.ok) {
+    throw new Error('Failed to save workout. Please try again.')
+  }
 }

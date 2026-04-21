@@ -18,7 +18,7 @@ interface Props {
 
 function CustomDot(props: { cx?: number; cy?: number; payload?: ChartPoint }) {
   const { cx, cy, payload } = props
-  if (!cx || !cy || !payload) return null
+  if (cx === undefined || cy === undefined || !payload) return null
   return (
     <circle
       cx={cx}

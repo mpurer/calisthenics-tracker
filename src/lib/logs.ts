@@ -2,7 +2,7 @@ import type { WorkoutLog, LogFile, ExerciseType } from '@/lib/types'
 
 export function parseLogFilename(filename: string): LogFile {
   // filename: "2026-04-21-planche-oahs.json"
-  const withoutExt = filename.replace('.json', '')
+  const withoutExt = filename.replace(/\.json$/, '')
   const date = withoutExt.slice(0, 10)             // "2026-04-21"
   const sessionType = withoutExt.slice(11)          // "planche-oahs"
   return { filename, date, sessionType }

@@ -57,9 +57,13 @@ export function LogWorkoutClient({ session, lastLog, lastLogDate }: Props) {
       rating,
       exercises,
     }
-    await writeLog(log)
-    setSaving(false)
-    router.push('/')
+    try {
+      await writeLog(log)
+      router.push('/')
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to save. Please try again.')
+      setSaving(false)
+    }
   }
 
   return (
