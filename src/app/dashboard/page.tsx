@@ -1,4 +1,4 @@
-import { listLogFiles, readLog } from '@/lib/github'
+import { listLogFilesServer as listLogFiles, readLogServer as readLog } from '@/lib/github-server'
 import type { WorkoutLog } from '@/lib/types'
 import { DashboardClient } from './DashboardClient'
 

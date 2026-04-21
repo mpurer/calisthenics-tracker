@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import { getSession } from '@/config/training-plan'
-import { listLogFiles, readLog } from '@/lib/github'
+import { listLogFilesServer as listLogFiles, readLogServer as readLog } from '@/lib/github-server'
 import { getLastSessionDate } from '@/lib/logs'
 import { LogWorkoutClient } from './LogWorkoutClient'
 

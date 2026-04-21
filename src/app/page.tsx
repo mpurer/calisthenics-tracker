@@ -1,12 +1,12 @@
 import Link from 'next/link'
-import { listLogFiles } from '@/lib/github'
+import { listLogFilesServer as listLogFiles } from '@/lib/github-server'
 import { DeloadToggle } from '@/components/DeloadToggle'
 import { SessionList } from '@/components/SessionList'
 
 export const dynamic = 'force-dynamic'
 
 export default async function Home() {
-  let logFiles: Awaited<ReturnType<typeof listLogFiles>> = []
+  let logFiles: import('@/lib/types').LogFile[] = []
   try {
     logFiles = await listLogFiles()
   } catch {
