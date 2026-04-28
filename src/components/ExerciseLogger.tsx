@@ -10,6 +10,7 @@ interface Props {
   prefillDate: string | null
   skipped: boolean
   onSkip: () => void
+  onRemoveFromPlan?: () => void
 }
 
 function emptySet(type: ExerciseConfig['type']): SetLog {
@@ -20,7 +21,7 @@ function emptySet(type: ExerciseConfig['type']): SetLog {
   }
 }
 
-export function ExerciseLogger({ config, value, onChange, prefillDate, skipped, onSkip }: Props) {
+export function ExerciseLogger({ config, value, onChange, prefillDate, skipped, onSkip, onRemoveFromPlan }: Props) {
   function handleSetChange(index: number, updated: SetLog) {
     const sets = value.sets.map((s, i) => (i === index ? updated : s))
     onChange({ ...value, sets })
@@ -40,16 +41,23 @@ export function ExerciseLogger({ config, value, onChange, prefillDate, skipped, 
         <div className={`font-semibold ${skipped ? 'text-slate-500 line-through' : 'text-slate-100'}`}>
           {config.name}
         </div>
-        <button
-          onClick={onSkip}
-          className={`text-xs px-2.5 py-1 rounded-lg transition-colors ${
-            skipped
-              ? 'bg-slate-700 text-slate-400 hover:text-slate-200'
-              : 'bg-slate-700 text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          {skipped ? 'Undo' : 'Skip'}
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={onSkip}
+            className="text-xs px-2.5 py-1 rounded-lg transition-colors bg-slate-700 text-slate-400 hover:text-slate-200"
+          >
+            {skipped ? 'Undo' : 'Skip'}
+          </button>
+          {onRemoveFromPlan && (
+            <button
+              onClick={onRemoveFromPlan}
+              title="Remove from plan"
+              className="text-xs px-2 py-1 rounded-lg transition-colors bg-slate-700 text-slate-600 hover:text-red-400"
+            >
+              ×
+            </button>
+          )}
+        </div>
       </div>
 
       {skipped ? (

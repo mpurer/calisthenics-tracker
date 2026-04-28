@@ -1,12 +1,15 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import type { ExerciseType, CustomExercise } from '@/lib/types'
+import type { ExerciseType, CustomExercise, ExerciseConfig } from '@/lib/types'
 
 interface Props {
   sessionSlug: string
   currentExerciseIds: string[]
   onAdd: (exercise: CustomExercise) => void
+  removedConfigExercises?: ExerciseConfig[]
+  onReAddConfig?: (id: string) => void
+  onDeleteCustom?: (id: string) => void
 }
 
 const TYPE_LABELS: Record<ExerciseType, string> = {
@@ -15,7 +18,14 @@ const TYPE_LABELS: Record<ExerciseType, string> = {
   'reps+weight': 'Reps + kg',
 }
 
-export function CustomExerciseAdder({ sessionSlug, currentExerciseIds, onAdd }: Props) {
+export function CustomExerciseAdder({
+  sessionSlug,
+  currentExerciseIds,
+  onAdd,
+  removedConfigExercises = [],
+  onReAddConfig,
+  onDeleteCustom,
+}: Props) {
   const storageKey = `custom-exercises-${sessionSlug}`
   const [saved, setSaved] = useState<CustomExercise[]>([])
   const [showForm, setShowForm] = useState(false)
@@ -34,8 +44,9 @@ export function CustomExerciseAdder({ sessionSlug, currentExerciseIds, onAdd }: 
     setSaved(exercises)
   }
 
-  function handleQuickAdd(exercise: CustomExercise) {
-    onAdd(exercise)
+  function handleDeleteCustom(id: string) {
+    persist(saved.filter(s => s.id !== id))
+    onDeleteCustom?.(id)
   }
 
   function handleNewExercise() {
@@ -56,23 +67,49 @@ export function CustomExerciseAdder({ sessionSlug, currentExerciseIds, onAdd }: 
     setShowForm(false)
   }
 
-  const available = saved.filter(s => !currentExerciseIds.includes(s.id))
+  const availableCustom = saved.filter(s => !currentExerciseIds.includes(s.id))
 
   return (
     <div>
-      <p className="text-xs text-slate-500 uppercase tracking-wider mb-3">Custom Exercises</p>
+      <p className="text-xs text-slate-500 uppercase tracking-wider mb-3">Exercises</p>
 
-      {available.length > 0 && (
+      {removedConfigExercises.length > 0 && (
+        <div className="mb-3">
+          <p className="text-xs text-slate-600 mb-2">Removed from plan</p>
+          <div className="flex flex-wrap gap-2">
+            {removedConfigExercises.map(ex => (
+              <button
+                key={ex.id}
+                onClick={() => onReAddConfig?.(ex.id)}
+                className="text-xs bg-slate-800 text-slate-400 border border-slate-700 rounded-lg px-3 py-1.5 hover:border-indigo-500 hover:text-white transition-colors"
+              >
+                ↩ {ex.name}
+                <span className="ml-1.5 text-slate-600">{TYPE_LABELS[ex.type]}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {availableCustom.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-3">
-          {available.map(ex => (
-            <button
-              key={ex.id}
-              onClick={() => handleQuickAdd(ex)}
-              className="text-xs bg-slate-800 text-slate-300 border border-slate-700 rounded-lg px-3 py-1.5 hover:border-indigo-500 hover:text-white transition-colors"
-            >
-              + {ex.name}
-              <span className="ml-1.5 text-slate-500">{TYPE_LABELS[ex.type]}</span>
-            </button>
+          {availableCustom.map(ex => (
+            <div key={ex.id} className="flex items-center bg-slate-800 border border-slate-700 rounded-lg overflow-hidden hover:border-indigo-500 transition-colors">
+              <button
+                onClick={() => onAdd(ex)}
+                className="text-xs text-slate-300 px-3 py-1.5 hover:text-white transition-colors"
+              >
+                + {ex.name}
+                <span className="ml-1.5 text-slate-500">{TYPE_LABELS[ex.type]}</span>
+              </button>
+              <button
+                onClick={() => handleDeleteCustom(ex.id)}
+                title="Delete from library"
+                className="text-slate-700 hover:text-red-400 px-2 py-1.5 transition-colors text-xs border-l border-slate-700"
+              >
+                ×
+              </button>
+            </div>
           ))}
         </div>
       )}

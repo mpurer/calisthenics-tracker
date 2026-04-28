@@ -54,10 +54,16 @@ export function LogWorkoutClient({ session, lastLog, lastLogDate }: Props) {
   const [saving, setSaving] = useState(false)
   const [isDeload, setIsDeload] = useState(false)
   const [draftRestored, setDraftRestored] = useState(false)
+  const [removedConfigIds, setRemovedConfigIds] = useState<Set<string>>(new Set())
 
   // Restore draft and deload state on mount
   useEffect(() => {
     setIsDeload(localStorage.getItem('deload-week') === 'true')
+
+    try {
+      const rawRemoved = localStorage.getItem(`plan-removed-${session.slug}`)
+      if (rawRemoved) setRemovedConfigIds(new Set(JSON.parse(rawRemoved)))
+    } catch {}
 
     try {
       const raw = localStorage.getItem(draftKey)
@@ -111,6 +117,44 @@ export function LogWorkoutClient({ session, lastLog, lastLogDate }: Props) {
     })
   }
 
+  function removeConfigExercise(id: string) {
+    setRemovedConfigIds(prev => {
+      const next = new Set(prev)
+      next.add(id)
+      localStorage.setItem(`plan-removed-${session.slug}`, JSON.stringify(Array.from(next)))
+      return next
+    })
+    setExercises(prev => prev.filter(e => e.id !== id))
+  }
+
+  function reAddConfigExercise(id: string) {
+    setRemovedConfigIds(prev => {
+      const next = new Set(prev)
+      next.delete(id)
+      localStorage.setItem(`plan-removed-${session.slug}`, JSON.stringify(Array.from(next)))
+      return next
+    })
+    const ex = session.blocks.flatMap(b => b.exercises).find(e => e.id === id)
+    if (!ex) return
+    const previous = lastLog?.exercises.find(e => e.id === id)
+    const sets = previous?.sets.length
+      ? previous.sets
+      : Array.from({ length: ex.defaultSets }, () => emptySetForType(ex.type))
+    setExercises(prev => [...prev, { id: ex.id, name: ex.name, sets }])
+  }
+
+  function removeCustomExercise(id: string) {
+    setExercises(prev => prev.filter(e => e.id !== id))
+    const storageKey = `custom-exercises-${session.slug}`
+    try {
+      const raw = localStorage.getItem(storageKey)
+      if (raw) {
+        const saved = (JSON.parse(raw) as CustomExercise[]).filter(e => e.id !== id)
+        localStorage.setItem(storageKey, JSON.stringify(saved))
+      }
+    } catch {}
+  }
+
   async function save() {
     setSaving(true)
     const log: WorkoutLog = {
@@ -123,6 +167,7 @@ export function LogWorkoutClient({ session, lastLog, lastLogDate }: Props) {
     try {
       await writeLog(log)
       localStorage.removeItem(draftKey)
+      localStorage.removeItem(`plan-removed-${session.slug}`)
       router.push('/')
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to save. Please try again.')
@@ -133,6 +178,10 @@ export function LogWorkoutClient({ session, lastLog, lastLogDate }: Props) {
   // IDs of all exercises in the session config (not custom)
   const configExerciseIds = session.blocks.flatMap(b => b.exercises.map(e => e.id))
   const customExercises = exercises.filter(e => !configExerciseIds.includes(e.id))
+
+  const removedConfigExercises = session.blocks
+    .flatMap(b => b.exercises)
+    .filter(ex => removedConfigIds.has(ex.id))
 
   return (
     <main className="max-w-md mx-auto px-4 py-8">
@@ -153,7 +202,7 @@ export function LogWorkoutClient({ session, lastLog, lastLogDate }: Props) {
           <div key={block.name}>
             <h2 className="text-xs text-slate-500 uppercase tracking-wider mb-2">{block.name}</h2>
             <div className="flex flex-col gap-3">
-              {block.exercises.map(ex => {
+              {block.exercises.filter(ex => !removedConfigIds.has(ex.id)).map(ex => {
                 const exerciseLog = exercises.find(e => e.id === ex.id)!
                 return (
                   <ExerciseLogger
@@ -164,6 +213,7 @@ export function LogWorkoutClient({ session, lastLog, lastLogDate }: Props) {
                     prefillDate={lastLog?.exercises.some(e => e.id === ex.id) ? lastLogDate : null}
                     skipped={skippedIds.has(ex.id)}
                     onSkip={() => toggleSkip(ex.id)}
+                    onRemoveFromPlan={() => removeConfigExercise(ex.id)}
                   />
                 )
               })}
@@ -192,6 +242,7 @@ export function LogWorkoutClient({ session, lastLog, lastLogDate }: Props) {
                     prefillDate={lastLog?.exercises.some(e => e.id === ex.id) ? lastLogDate : null}
                     skipped={skippedIds.has(ex.id)}
                     onSkip={() => toggleSkip(ex.id)}
+                    onRemoveFromPlan={() => removeCustomExercise(ex.id)}
                   />
                 )
               })}
@@ -203,6 +254,9 @@ export function LogWorkoutClient({ session, lastLog, lastLogDate }: Props) {
           sessionSlug={session.slug}
           currentExerciseIds={exercises.map(e => e.id)}
           onAdd={addCustomExercise}
+          removedConfigExercises={removedConfigExercises}
+          onReAddConfig={reAddConfigExercise}
+          onDeleteCustom={removeCustomExercise}
         />
       </div>
 
