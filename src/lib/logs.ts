@@ -1,10 +1,13 @@
-import type { WorkoutLog, LogFile, ExerciseType } from '@/lib/types'
+import type { WorkoutLog, LogFile, ExerciseType, SetLog } from '@/lib/types'
 
 export function parseLogFilename(filename: string): LogFile {
-  // filename: "2026-04-21-planche-oahs.json"
   const withoutExt = filename.replace(/\.json$/, '')
-  const date = withoutExt.slice(0, 10)             // "2026-04-21"
-  const sessionType = withoutExt.slice(11)          // "planche-oahs"
+  const date = withoutExt.slice(0, 10)
+  // New format: YYYY-MM-DDTHHMM-slug (char 10 is 'T', time is 4 digits, then '-')
+  // Old format: YYYY-MM-DD-slug (char 10 is '-')
+  const sessionType = withoutExt[10] === 'T'
+    ? withoutExt.slice(16)
+    : withoutExt.slice(11)
   return { filename, date, sessionType }
 }
 
@@ -12,8 +15,16 @@ export function getLastSessionDate(filenames: string[], sessionType: string): st
   const matches = filenames
     .map(parseLogFilename)
     .filter(f => f.sessionType === sessionType)
-    .sort((a, b) => b.date.localeCompare(a.date))
+    .sort((a, b) => b.filename.localeCompare(a.filename))
   return matches[0]?.date ?? null
+}
+
+export function getLastSessionFile(filenames: string[], sessionType: string): LogFile | null {
+  const matches = filenames
+    .map(parseLogFilename)
+    .filter(f => f.sessionType === sessionType)
+    .sort((a, b) => b.filename.localeCompare(a.filename))
+  return matches[0] ?? null
 }
 
 export function getBestValue(
@@ -37,6 +48,21 @@ export function getBestValue(
     return Math.max(...values)
   }
   return null
+}
+
+export function inferExerciseType(sets: SetLog[]): ExerciseType {
+  const sample = sets[0]
+  if (!sample) return 'reps'
+  if ('duration' in sample) return 'duration'
+  if ('weight' in sample) return 'reps+weight'
+  return 'reps'
+}
+
+export function getSessionVolume(log: WorkoutLog, exerciseId: string): number | null {
+  const ex = log.exercises.find(e => e.id === exerciseId)
+  if (!ex || ex.sets.length === 0) return null
+  const total = ex.sets.reduce((sum, s) => sum + (s.weight ?? 0) * (s.reps ?? 0), 0)
+  return total || null
 }
 
 export function computeStats(values: number[]): {

@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import { getSession } from '@/config/training-plan'
 import { listLogFilesServer as listLogFiles, readLogServer as readLog } from '@/lib/github-server'
-import { getLastSessionDate } from '@/lib/logs'
+import { getLastSessionFile } from '@/lib/logs'
 import { LogWorkoutClient } from './LogWorkoutClient'
 
 export const dynamic = 'force-dynamic'
@@ -20,10 +20,10 @@ export default async function LogWorkoutPage({ params }: Props) {
   try {
     const logFiles = await listLogFiles()
     const filenames = logFiles.map(f => f.filename)
-    lastLogDate = getLastSessionDate(filenames, params.sessionType)
-    if (lastLogDate) {
-      const filename = `${lastLogDate}-${params.sessionType}.json`
-      const data = await readLog(filename)
+    const lastFile = getLastSessionFile(filenames, params.sessionType)
+    if (lastFile) {
+      lastLogDate = lastFile.date
+      const data = await readLog(lastFile.filename)
       lastLog = data
     }
   } catch {

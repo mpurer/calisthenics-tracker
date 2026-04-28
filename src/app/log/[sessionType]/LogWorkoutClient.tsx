@@ -2,10 +2,19 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import type { SessionConfig, WorkoutLog, ExerciseLog, SetLog } from '@/lib/types'
+import type { SessionConfig, WorkoutLog, ExerciseLog, SetLog, CustomExercise, ExerciseType } from '@/lib/types'
 import { ExerciseLogger } from '@/components/ExerciseLogger'
 import { StarRating } from '@/components/StarRating'
+import { CustomExerciseAdder } from '@/components/CustomExerciseAdder'
 import { writeLog } from '@/lib/github'
+
+function emptySetForType(type: ExerciseType): SetLog {
+  return {
+    duration: type === 'duration' ? null : undefined,
+    reps: (type === 'reps' || type === 'reps+weight') ? null : undefined,
+    weight: type === 'reps+weight' ? null : undefined,
+  }
+}
 
 function buildInitialExercises(session: SessionConfig, lastLog: WorkoutLog | null): ExerciseLog[] {
   return session.blocks.flatMap(block =>
@@ -14,12 +23,7 @@ function buildInitialExercises(session: SessionConfig, lastLog: WorkoutLog | nul
       if (previous && previous.sets.length > 0) {
         return { id: ex.id, name: ex.name, sets: previous.sets }
       }
-      const emptySet = (): SetLog => ({
-        duration: ex.type === 'duration' ? null : undefined,
-        reps: (ex.type === 'reps' || ex.type === 'reps+weight') ? null : undefined,
-        weight: ex.type === 'reps+weight' ? null : undefined,
-      })
-      return { id: ex.id, name: ex.name, sets: Array.from({ length: ex.defaultSets }, emptySet) }
+      return { id: ex.id, name: ex.name, sets: Array.from({ length: ex.defaultSets }, () => emptySetForType(ex.type)) }
     })
   )
 }
@@ -30,41 +34,105 @@ interface Props {
   lastLogDate: string | null
 }
 
+interface Draft {
+  date: string
+  exercises: ExerciseLog[]
+  skippedIds: string[]
+  rating: number
+}
+
 export function LogWorkoutClient({ session, lastLog, lastLogDate }: Props) {
   const router = useRouter()
+  const draftKey = `workout-draft-${session.slug}`
+  const today = new Date().toISOString().slice(0, 10)
+
   const [exercises, setExercises] = useState<ExerciseLog[]>(() =>
     buildInitialExercises(session, lastLog)
   )
+  const [skippedIds, setSkippedIds] = useState<Set<string>>(new Set())
   const [rating, setRating] = useState(3)
   const [saving, setSaving] = useState(false)
   const [isDeload, setIsDeload] = useState(false)
+  const [draftRestored, setDraftRestored] = useState(false)
 
+  // Restore draft and deload state on mount
   useEffect(() => {
     setIsDeload(localStorage.getItem('deload-week') === 'true')
-  }, [])
+
+    try {
+      const raw = localStorage.getItem(draftKey)
+      if (raw) {
+        const draft: Draft = JSON.parse(raw)
+        if (draft.date === today) {
+          setExercises(draft.exercises)
+          setSkippedIds(new Set(draft.skippedIds))
+          setRating(draft.rating)
+          setDraftRestored(true)
+        }
+      }
+    } catch {
+      // corrupt draft — ignore
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist draft on every change
+  useEffect(() => {
+    const draft: Draft = {
+      date: today,
+      exercises,
+      skippedIds: Array.from(skippedIds),
+      rating,
+    }
+    localStorage.setItem(draftKey, JSON.stringify(draft))
+  }, [exercises, skippedIds, rating]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function updateExercise(id: string, updated: ExerciseLog) {
     setExercises(prev => prev.map(e => (e.id === id ? updated : e)))
   }
 
+  function toggleSkip(id: string) {
+    setSkippedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function addCustomExercise(custom: CustomExercise) {
+    setExercises(prev => {
+      if (prev.some(e => e.id === custom.id)) return prev
+      // Prefill from lastLog if this exercise was logged before
+      const previous = lastLog?.exercises.find(e => e.id === custom.id)
+      const sets = previous?.sets.length
+        ? previous.sets
+        : Array.from({ length: 3 }, () => emptySetForType(custom.type))
+      return [...prev, { id: custom.id, name: custom.name, sets }]
+    })
+  }
+
   async function save() {
     setSaving(true)
-    const today = new Date().toISOString().slice(0, 10)
     const log: WorkoutLog = {
       date: today,
       sessionType: session.slug,
       isDeload,
       rating,
-      exercises,
+      exercises: exercises.filter(e => !skippedIds.has(e.id)),
     }
     try {
       await writeLog(log)
+      localStorage.removeItem(draftKey)
       router.push('/')
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to save. Please try again.')
       setSaving(false)
     }
   }
+
+  // IDs of all exercises in the session config (not custom)
+  const configExerciseIds = session.blocks.flatMap(b => b.exercises.map(e => e.id))
+  const customExercises = exercises.filter(e => !configExerciseIds.includes(e.id))
 
   return (
     <main className="max-w-md mx-auto px-4 py-8">
@@ -75,6 +143,9 @@ export function LogWorkoutClient({ session, lastLog, lastLogDate }: Props) {
           {new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
           {isDeload && <span className="ml-2 text-xs bg-purple-700 text-purple-100 px-2 py-0.5 rounded">DELOAD</span>}
         </p>
+        {draftRestored && (
+          <p className="text-xs text-indigo-400 mt-1">⟳ Draft restored from earlier today</p>
+        )}
       </div>
 
       <div className="flex flex-col gap-6">
@@ -91,12 +162,48 @@ export function LogWorkoutClient({ session, lastLog, lastLogDate }: Props) {
                     value={exerciseLog}
                     onChange={updated => updateExercise(ex.id, updated)}
                     prefillDate={lastLog?.exercises.some(e => e.id === ex.id) ? lastLogDate : null}
+                    skipped={skippedIds.has(ex.id)}
+                    onSkip={() => toggleSkip(ex.id)}
                   />
                 )
               })}
             </div>
           </div>
         ))}
+
+        {/* Custom exercises added this session */}
+        {customExercises.length > 0 && (
+          <div>
+            <h2 className="text-xs text-slate-500 uppercase tracking-wider mb-2">Custom</h2>
+            <div className="flex flex-col gap-3">
+              {customExercises.map(ex => {
+                // Infer config-like object from the exercise log
+                const type = (ex.sets[0]?.weight !== undefined)
+                  ? 'reps+weight' as const
+                  : (ex.sets[0]?.duration !== undefined)
+                  ? 'duration' as const
+                  : 'reps' as const
+                return (
+                  <ExerciseLogger
+                    key={ex.id}
+                    config={{ id: ex.id, name: ex.name, type, defaultSets: 3 }}
+                    value={ex}
+                    onChange={updated => updateExercise(ex.id, updated)}
+                    prefillDate={lastLog?.exercises.some(e => e.id === ex.id) ? lastLogDate : null}
+                    skipped={skippedIds.has(ex.id)}
+                    onSkip={() => toggleSkip(ex.id)}
+                  />
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        <CustomExerciseAdder
+          sessionSlug={session.slug}
+          currentExerciseIds={exercises.map(e => e.id)}
+          onAdd={addCustomExercise}
+        />
       </div>
 
       <div className="mt-6">

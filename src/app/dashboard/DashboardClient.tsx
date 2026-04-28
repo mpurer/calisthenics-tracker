@@ -1,39 +1,94 @@
 'use client'
 
 import { useState } from 'react'
-import type { WorkoutLog } from '@/lib/types'
+import type { WorkoutLog, ExerciseType } from '@/lib/types'
 import { getAllExercises, SESSIONS } from '@/config/training-plan'
-import { getBestValue, computeStats } from '@/lib/logs'
+import { getBestValue, getSessionVolume, computeStats, inferExerciseType } from '@/lib/logs'
 import { ProgressChart } from '@/components/ProgressChart'
 import type { ChartPoint } from '@/components/ProgressChart'
-import type { ExerciseType } from '@/lib/types'
 
 interface Props {
   logs: WorkoutLog[]
 }
 
-const allExercises = getAllExercises()
+const SESSION_RATING_ID = '__session-rating__'
 
-function getExerciseType(exerciseId: string): ExerciseType {
+function getConfigExerciseType(exerciseId: string): ExerciseType | null {
   for (const session of SESSIONS) {
     for (const block of session.blocks) {
       const ex = block.exercises.find(e => e.id === exerciseId)
       if (ex) return ex.type
     }
   }
-  return 'reps'
+  return null
 }
 
-export function DashboardClient({ logs }: Props) {
-  const [selectedId, setSelectedId] = useState(allExercises[0]?.id ?? '')
+type Metric = 'weight' | 'reps' | 'volume'
 
-  const type = getExerciseType(selectedId)
+export function DashboardClient({ logs }: Props) {
+  const allConfigExercises = getAllExercises()
+  const configIds = new Set(allConfigExercises.map(e => e.id))
+
+  // Collect custom exercises from logs (not in config)
+  const customMap = new Map<string, { id: string; name: string }>()
+  for (const log of logs) {
+    for (const ex of log.exercises) {
+      if (!configIds.has(ex.id) && !customMap.has(ex.id)) {
+        customMap.set(ex.id, { id: ex.id, name: ex.name })
+      }
+    }
+  }
+  const customExercises = Array.from(customMap.values())
+
+  const [selectedId, setSelectedId] = useState(SESSION_RATING_ID)
+  const [metric, setMetric] = useState<Metric>('weight')
+
+  const isRating = selectedId === SESSION_RATING_ID
+
+  function getExerciseType(exerciseId: string): ExerciseType {
+    const configType = getConfigExerciseType(exerciseId)
+    if (configType) return configType
+    // Infer from log data for custom exercises
+    for (const log of logs) {
+      const ex = log.exercises.find(e => e.id === exerciseId)
+      if (ex && ex.sets.length > 0) return inferExerciseType(ex.sets)
+    }
+    return 'reps'
+  }
+
+  const type = isRating ? 'reps' : getExerciseType(selectedId)
+  const isWeighted = type === 'reps+weight'
 
   const points: ChartPoint[] = logs
     .map(log => {
+      if (isRating) {
+        return { date: log.date, value: log.rating, isDeload: log.isDeload }
+      }
+
+      if (isWeighted) {
+        const ex = log.exercises.find(e => e.id === selectedId)
+        if (!ex || ex.sets.length === 0) return null
+        const comment = ex.comment
+
+        if (metric === 'weight') {
+          const value = Math.max(...ex.sets.map(s => s.weight ?? 0))
+          const totalReps = ex.sets.reduce((sum, s) => sum + (s.reps ?? 0), 0)
+          return { date: log.date, value, isDeload: log.isDeload, label: `${totalReps} reps`, comment }
+        }
+        if (metric === 'reps') {
+          const value = Math.max(...ex.sets.map(s => s.reps ?? 0))
+          const maxWeight = Math.max(...ex.sets.map(s => s.weight ?? 0))
+          return { date: log.date, value, isDeload: log.isDeload, label: `${maxWeight} kg`, comment }
+        }
+        const value = getSessionVolume(log, selectedId)
+        if (value === null) return null
+        return { date: log.date, value, isDeload: log.isDeload, comment }
+      }
+
+      const ex = log.exercises.find(e => e.id === selectedId)
       const value = getBestValue(log, selectedId, type)
       if (value === null) return null
-      return { date: log.date, value, isDeload: log.isDeload }
+      return { date: log.date, value, isDeload: log.isDeload, comment: ex?.comment }
     })
     .filter((p): p is ChartPoint => p !== null)
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -41,7 +96,17 @@ export function DashboardClient({ logs }: Props) {
   const values = points.map(p => p.value)
   const stats = computeStats(values)
 
-  const yLabel = type === 'duration' ? 's' : type === 'reps+weight' ? 'kg' : 'reps'
+  let yLabel: string
+  if (isRating) yLabel = '★'
+  else if (isWeighted && metric === 'reps') yLabel = 'reps'
+  else if (isWeighted && metric === 'volume') yLabel = 'vol'
+  else if (type === 'duration') yLabel = 's'
+  else if (type === 'reps+weight') yLabel = 'kg'
+  else yLabel = 'reps'
+
+  const bestLabel = isRating
+    ? stats.allTimeBest !== null ? `${stats.allTimeBest}★` : '—'
+    : stats.allTimeBest !== null ? `${stats.allTimeBest}${yLabel}` : '—'
 
   return (
     <main className="max-w-md mx-auto px-4 py-8">
@@ -52,13 +117,41 @@ export function DashboardClient({ logs }: Props) {
 
       <select
         value={selectedId}
-        onChange={e => setSelectedId(e.target.value)}
+        onChange={e => { setSelectedId(e.target.value); setMetric('weight') }}
         className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-3 text-sm text-slate-100 mb-4 focus:outline-none focus:border-indigo-500"
       >
-        {allExercises.map(ex => (
-          <option key={ex.id} value={ex.id}>{ex.name}</option>
-        ))}
+        <option value={SESSION_RATING_ID}>⭐ Session Rating</option>
+        <optgroup label="Exercises">
+          {allConfigExercises.map(ex => (
+            <option key={ex.id} value={ex.id}>{ex.name}</option>
+          ))}
+        </optgroup>
+        {customExercises.length > 0 && (
+          <optgroup label="Custom">
+            {customExercises.map(ex => (
+              <option key={ex.id} value={ex.id}>{ex.name}</option>
+            ))}
+          </optgroup>
+        )}
       </select>
+
+      {isWeighted && (
+        <div className="flex gap-2 mb-4">
+          {(['weight', 'reps', 'volume'] as Metric[]).map(m => (
+            <button
+              key={m}
+              onClick={() => setMetric(m)}
+              className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
+                metric === m
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {m === 'weight' ? 'Weight (kg)' : m === 'reps' ? 'Reps' : 'Volume'}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="bg-slate-800 rounded-xl p-4 mb-4">
         <ProgressChart data={points} yLabel={yLabel} />
@@ -66,9 +159,7 @@ export function DashboardClient({ logs }: Props) {
 
       <div className="grid grid-cols-3 gap-3 mb-4">
         <div className="bg-slate-800 rounded-xl p-3 text-center">
-          <div className="text-xl font-bold text-indigo-400">
-            {stats.allTimeBest !== null ? `${stats.allTimeBest}${yLabel}` : '—'}
-          </div>
+          <div className="text-xl font-bold text-indigo-400">{bestLabel}</div>
           <div className="text-xs text-slate-500 mt-1">All-time best</div>
         </div>
         <div className="bg-slate-800 rounded-xl p-3 text-center">

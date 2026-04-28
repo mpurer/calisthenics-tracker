@@ -19,7 +19,9 @@ export async function readLog(filename: string): Promise<WorkoutLog | null> {
 }
 
 export async function writeLog(log: WorkoutLog): Promise<void> {
-  const filename = `${log.date}-${log.sessionType}.json`
+  const now = new Date()
+  const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0')
+  const filename = `${log.date}T${hhmm}-${log.sessionType}.json`
   const res = await fetch(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

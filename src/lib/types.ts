@@ -28,6 +28,7 @@ export interface ExerciseLog {
   id: string
   name: string
   sets: SetLog[]
+  comment?: string
 }
 
 export interface WorkoutLog {
@@ -36,6 +37,12 @@ export interface WorkoutLog {
   isDeload: boolean
   rating: number          // 1–5
   exercises: ExerciseLog[]
+}
+
+export interface CustomExercise {
+  id: string
+  name: string
+  type: ExerciseType
 }
 
 export interface LogFile {

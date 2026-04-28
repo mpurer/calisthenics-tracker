@@ -147,7 +147,7 @@ export const SESSIONS: SessionConfig[] = [
       {
         name: 'Legs',
         exercises: [
-          { id: 'bulgarian-split-squat', name: 'Bulgarian split squats', type: 'reps', defaultSets: 3 },
+          { id: 'bulgarian-split-squat', name: 'Bulgarian split squats with leg extensions', type: 'reps+weight', defaultSets: 3 },
           { id: 'leg-press', name: 'Leg press', type: 'reps+weight', defaultSets: 3 },
           { id: 'hamstring-curls', name: 'Hamstring curls', type: 'reps+weight', defaultSets: 3 },
           { id: 'calf-raises', name: 'Standing calf raises', type: 'reps', defaultSets: 3 },
